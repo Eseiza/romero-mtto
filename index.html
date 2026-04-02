@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Pagos MTTO · Romero Panificados</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,600;1,400&family=Nunito:wght@400;600;700&display=swap');
+:root{--gold:#c8860a;--red:#c8420a;--brown:#3a200a;--brown-mid:#7a4a20;
+--brown-light:#a07840;--cream:#fdf8f0;--cream-dark:#f7f0e6;--cream-mid:#fdf5e4;
+--border:#ddd0b8;--border-light:#f0e4cc;--green:#3d7a3a;
+--shadow:0 8px 40px rgba(100,60,10,0.10);}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Nunito',sans-serif;background:var(--cream-dark);
+background-image:radial-gradient(circle at 20% 20%,rgba(200,134,10,0.06) 0%,transparent 50%),
+radial-gradient(circle at 80% 80%,rgba(200,66,10,0.04) 0%,transparent 50%);
+min-height:100vh;padding:24px 16px;}
+.hidden{display:none!important;}
+
+/* LOADING */
+#loadingOverlay{position:fixed;inset:0;background:var(--cream-dark);z-index:9999;
+display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
+.loading-logo{height:64px;object-fit:contain;}
+.loading-spinner{width:36px;height:36px;border:3px solid var(--border);
+border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite;}
+.loading-text{font-size:13px;color:var(--brown-light);font-weight:600;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* LOGIN */
+.login-wrap{min-height:calc(100vh - 48px);display:flex;align-items:center;justify-content:center;}
+.login-card{width:100%;max-width:400px;background:#fff;border-radius:20px;
+border:1.5px solid var(--border);overflow:hidden;box-shadow:var(--shadow);}
+.login-header{padding:32px 36px 24px;border-bottom:1.5px solid var(--border-light);
+display:flex;flex-direction:column;align-items:center;gap:10px;}
+.login-logo{height:56px;object-fit:contain;}
+.login-header p{font-size:13px;color:var(--brown-light);font-weight:600;letter-spacing:0.3px;}
+.login-body{padding:26px 36px 32px;}
+.login-footer{padding:12px 36px;background:var(--cream-mid);border-top:1.5px solid var(--border-light);
+display:flex;align-items:center;justify-content:center;gap:10px;}
+.login-footer-logo{height:22px;object-fit:contain;opacity:0.7;}
+.footer-dot{width:4px;height:4px;border-radius:50%;background:#c8a060;flex-shrink:0;}
+.login-footer span{font-size:11px;font-weight:700;color:var(--brown-light);letter-spacing:0.4px;}
+
+/* SYNC */
+.sync-dot{width:8px;height:8px;border-radius:50%;display:inline-block;
+margin-left:6px;transition:background 0.4s;background:#ccc;vertical-align:middle;}
+.sync-dot.syncing{background:var(--gold);animation:pulse 1s infinite;}
+.sync-dot.ok{background:#4caf50;}
+.sync-dot.error{background:#b83030;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
+
+/* CAMPOS */
+.field{margin-bottom:18px;}
+.field label{font-size:11px;font-weight:700;color:var(--brown-light);letter-spacing:1px;
+text-transform:uppercase;display:block;margin-bottom:7px;}
+.field input,.field select,.field textarea{width:100%;padding:11px 15px;
+border:1.5px solid var(--border);border-radius:10px;font-family:'Nunito',sans-serif;
+font-size:14px;font-weight:600;color:var(--brown);background:var(--cream);
+transition:border-color 0.2s,background 0.2s;appearance:none;-webkit-appearance:none;}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--gold);background:#fff;}
+.field textarea{resize:vertical;min-height:64px;}
+.highlight-input{border-color:var(--gold)!important;background:#fffbf0!important;}
+
+/* BOTONES */
+.btn{cursor:pointer;font-family:'Nunito',sans-serif;font-weight:700;border-radius:10px;
+border:none;transition:background 0.2s,color 0.2s,transform 0.1s;}
+.btn:active{transform:scale(0.98);}
+.btn-primary{width:100%;padding:14px;background:var(--cream);color:var(--red);
+border:2px solid var(--red)!important;font-family:'Lora',serif;font-size:16px;font-weight:600;margin-top:8px;}
+.btn-primary:hover{background:var(--red);color:var(--cream);}
+.btn-register{width:100%;padding:14px;background:var(--brown);color:var(--cream);
+font-family:'Lora',serif;font-size:15px;font-weight:600;}
+.btn-register:hover{background:#5a3010;}
+.btn-excel{flex:1;padding:11px 16px;background:var(--green);color:#fff;font-size:13px;}
+.btn-excel:hover{background:#2d5e2a;}
+.btn-danger{padding:11px 16px;background:#b83030;color:#fff;font-size:13px;}
+.btn-danger:hover{background:#902020;}
+.btn-logout{padding:7px 16px;background:var(--cream-mid);color:var(--brown-mid);
+border:1.5px solid var(--border)!important;font-size:13px;font-weight:700;}
+.btn-logout:hover{background:var(--border-light);}
+
+/* PANEL */
+.container{max-width:1040px;margin:0 auto;background:#fff;border-radius:20px;
+border:1.5px solid var(--border);overflow:hidden;box-shadow:var(--shadow);}
+.panel-header{display:flex;justify-content:space-between;align-items:center;
+padding:20px 32px;background:var(--cream-mid);border-bottom:1.5px solid var(--border-light);}
+.panel-header-left{display:flex;align-items:center;gap:16px;}
+.panel-logo{height:40px;object-fit:contain;}
+.panel-header-text h2{font-family:'Lora',serif;font-size:17px;font-weight:600;
+color:var(--brown);line-height:1.2;}
+.role-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10px;
+font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:0.6px;margin-top:3px;}
+
+/* TABS */
+.tabs{display:flex;border-bottom:1.5px solid var(--border-light);background:#fff;
+padding:0 32px;overflow-x:auto;}
+.tab-btn{padding:14px 22px;font-family:'Nunito',sans-serif;font-size:13px;font-weight:700;
+color:var(--brown-light);background:transparent;border:none;white-space:nowrap;
+border-bottom:3px solid transparent;cursor:pointer;
+transition:color 0.2s,border-color 0.2s;margin-bottom:-1.5px;letter-spacing:0.3px;}
+.tab-btn:hover{color:var(--brown);}
+.tab-btn.active{color:var(--red);border-bottom-color:var(--red);}
+.tab-content{display:none;padding:28px 32px 32px;}
+.tab-content.active{display:block;}
+
+.section-title{font-family:'Lora',serif;font-size:15px;font-weight:600;color:var(--brown-mid);
+margin-bottom:16px;display:flex;align-items:center;gap:10px;}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border-light);}
+
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;
+background:var(--cream);border:1.5px solid var(--border-light);border-radius:14px;
+padding:22px;margin-bottom:22px;}
+.full-width{grid-column:1/-1;}
+
+/* HISTORIAL */
+.historial-list{display:flex;flex-direction:column;gap:10px;}
+.historial-item{display:flex;align-items:center;justify-content:space-between;
+background:var(--cream);border:1.5px solid var(--border-light);border-radius:12px;
+padding:14px 18px;gap:12px;transition:border-color 0.2s;}
+.historial-item:hover{border-color:var(--gold);}
+.historial-info{flex:1;min-width:0;}
+.historial-nombre{font-family:'Lora',serif;font-size:15px;font-weight:600;color:var(--brown);
+white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.historial-meta{font-size:12px;color:var(--brown-light);margin-top:3px;}
+.historial-total{font-family:'Lora',serif;font-size:16px;font-weight:600;color:var(--brown-mid);white-space:nowrap;}
+.historial-fecha{font-size:11px;color:var(--brown-light);text-align:right;white-space:nowrap;}
+.historial-empty,.ap-empty,.pagos-empty{text-align:center;padding:40px 20px;
+color:var(--brown-light);font-size:14px;font-style:italic;}
+
+/* BADGES */
+.estado-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;
+border-radius:20px;font-size:10px;font-weight:700;letter-spacing:0.4px;white-space:nowrap;}
+.estado-badge.pendiente{background:#fff8e6;color:#c8860a;border:1.5px solid #f0c878;}
+.estado-badge.aprobado{background:#f0faf0;color:#2e7d32;border:1.5px solid #a8d8a0;}
+.estado-badge.rechazado{background:#fff5f5;color:#b83030;border:1.5px solid #f0a8a8;}
+
+/* RESUMEN */
+.resumen-grid{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
+.resumen-card{flex:1;min-width:110px;background:var(--cream);border:1.5px solid var(--border-light);
+border-radius:12px;padding:14px 18px;text-align:center;}
+.resumen-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;
+color:var(--brown-light);margin-bottom:6px;}
+.resumen-valor{font-family:'Lora',serif;font-size:20px;font-weight:600;color:var(--brown);}
+.resumen-card.verde{background:#f0faf0;border-color:#a8d8a0;}
+.resumen-card.verde .resumen-valor{color:#2e7d32;}
+.resumen-card.rojo{background:#fff5f5;border-color:#f0a8a8;}
+.resumen-card.rojo .resumen-valor{color:#b83030;}
+.resumen-card.amarillo{background:#fff8f0;border-color:#f0c878;}
+.resumen-card.amarillo .resumen-valor{color:var(--red);}
+
+/* FILTROS */
+.filtros-row{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;}
+.filtro-btn{padding:7px 16px;font-family:'Nunito',sans-serif;font-size:12px;font-weight:700;
+border-radius:20px;border:1.5px solid var(--border);background:#fff;color:var(--brown-light);
+cursor:pointer;transition:all 0.2s;letter-spacing:0.3px;}
+.filtro-btn:hover{border-color:var(--gold);color:var(--brown);}
+.filtro-btn.active{background:var(--brown);color:var(--cream);border-color:var(--brown);}
+
+/* APROBACIONES */
+.aprobacion-list{display:flex;flex-direction:column;gap:12px;}
+.aprobacion-item{background:var(--cream);border:1.5px solid var(--border-light);
+border-radius:14px;padding:16px 18px;transition:border-color 0.2s;}
+.aprobacion-item:hover{border-color:var(--gold);}
+.aprobacion-item.ap-aprobado{background:#f0faf0;border-color:#a8d8a0;}
+.aprobacion-item.ap-rechazado{background:#fff5f5;border-color:#f0a8a8;}
+.ap-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.ap-info{flex:1;min-width:0;}
+.ap-nombre{font-family:'Lora',serif;font-size:15px;font-weight:600;color:var(--brown);}
+.ap-meta{font-size:12px;color:var(--brown-light);margin-top:3px;line-height:1.6;}
+.ap-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0;}
+.ap-total{font-family:'Lora',serif;font-size:16px;font-weight:600;color:var(--brown-mid);}
+.ap-acciones{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center;}
+.comentario-input{width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;
+font-family:'Nunito',sans-serif;font-size:13px;color:var(--brown);background:#fff;
+margin-top:10px;resize:vertical;min-height:50px;transition:border-color 0.2s;}
+.comentario-input:focus{outline:none;border-color:var(--gold);}
+.comentario-guardado{margin-top:8px;font-size:12px;color:var(--brown-light);font-style:italic;
+padding:6px 10px;background:#fff;border-radius:7px;border:1px solid var(--border-light);}
+.comentario-guardado strong{color:var(--brown-mid);font-style:normal;}
+.btn-ap{padding:7px 16px;font-size:12px;font-weight:700;border-radius:8px;cursor:pointer;
+font-family:'Nunito',sans-serif;transition:all 0.2s;
+display:inline-flex;align-items:center;gap:5px;border:1.5px solid;}
+.btn-ap.aprobar{background:#f0faf0;color:#2e7d32;border-color:#a8d8a0;}
+.btn-ap.aprobar:hover{background:#2e7d32;color:#fff;border-color:#2e7d32;}
+.btn-ap.rechazar{background:#fff5f5;color:#b83030;border-color:#f0a8a8;}
+.btn-ap.rechazar:hover{background:#b83030;color:#fff;border-color:#b83030;}
+.btn-ap.deshacer{background:var(--cream);color:var(--brown-light);border-color:var(--border);font-size:11px;}
+.btn-ap.deshacer:hover{background:var(--border-light);color:var(--brown);}
+.readonly-notice{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;
+background:#fff8e6;border:1.5px solid #f0c878;border-radius:8px;
+font-size:11px;font-weight:700;color:#c8860a;}
+
+/* PAGOS */
+.pagos-list{display:flex;flex-direction:column;gap:10px;}
+.pago-item{display:flex;align-items:center;justify-content:space-between;
+background:var(--cream);border:1.5px solid var(--border-light);border-radius:12px;
+padding:14px 18px;gap:12px;transition:border-color 0.2s;}
+.pago-item:hover{border-color:var(--gold);}
+.pago-item.pagado{background:#f0faf0;border-color:#a8d8a0;}
+.pago-info{flex:1;min-width:0;}
+.pago-nombre{font-family:'Lora',serif;font-size:15px;font-weight:600;color:var(--brown);
+white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pago-meta{font-size:12px;color:var(--brown-light);margin-top:3px;}
+.pago-right{display:flex;align-items:center;gap:14px;flex-shrink:0;}
+.pago-total{font-family:'Lora',serif;font-size:16px;font-weight:600;color:var(--brown-mid);}
+.pago-toggle{display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 12px;
+border-radius:8px;border:1.5px solid var(--border);background:#fff;transition:all 0.2s;
+font-family:'Nunito',sans-serif;font-size:12px;font-weight:700;color:var(--brown-light);white-space:nowrap;}
+.pago-toggle:hover{border-color:var(--green);color:var(--green);}
+.pago-toggle.pagado-btn{background:#f0faf0;border-color:#4caf50;color:#2e7d32;}
+.pago-toggle.pagado-btn:hover{background:#ffe0e0;border-color:#b83030;color:#b83030;}
+.pago-dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0;}
+
+/* ADMIN */
+.admin-actions{display:flex;gap:10px;margin-bottom:24px;flex-wrap:wrap;}
+.chart-wrapper{height:280px;margin-bottom:28px;background:var(--cream);
+border:1.5px solid var(--border-light);border-radius:14px;padding:16px;}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;}
+.stat-card{background:var(--cream);border:1.5px solid var(--border-light);border-radius:12px;
+padding:16px;text-align:center;transition:border-color 0.2s;}
+.stat-card:hover{border-color:var(--gold);}
+.stat-month{font-size:11px;font-weight:700;text-transform:capitalize;color:var(--brown-light);
+letter-spacing:0.5px;margin-bottom:6px;}
+.stat-value{font-family:'Lora',serif;font-size:20px;font-weight:600;color:var(--brown);}
+    </style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loadingOverlay">
+    <img src="https://www.romeropanificados.com.ar/wp-content/uploads/2023/01/Recurso-8.png"
+         class="loading-logo" onerror="this.style.display='none'">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">Conectando...</div>
+</div>
+
+<!-- LOGIN -->
+<div id="loginSection" class="login-wrap hidden">
+    <div class="login-card">
+        <div class="login-header">
+            <img src="https://www.romeropanificados.com.ar/wp-content/uploads/2023/01/Recurso-8.png"
+                 alt="Romero Panificados" class="login-logo" onerror="this.style.display='none'">
+            <p>Inventario · Mantenimiento</p>
+        </div>
+        <div class="login-body">
+            <div class="field">
+                <label>¿Quién sos?</label>
+                <select id="userSelect">
+                    <option value="guillermo">Guillermo (Carga)</option>
+                    <option value="supervisor">Supervisor</option>
+                    <option value="oficina">Oficina</option>
+                    <option value="admin">Administrador</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Contraseña</label>
+                <input type="password" id="passInput" placeholder="••••••••••"
+                       onkeydown="if(event.key==='Enter') login()">
+            </div>
+            <button class="btn btn-primary" onclick="login()">Entrar</button>
+        </div>
+        <div class="login-footer">
+            <img src="https://www.romeropanificados.com.ar/wp-content/uploads/2023/01/Recurso-8.png"
+                 alt="Romero" class="login-footer-logo" onerror="this.style.display='none'">
+            <div class="footer-dot"></div>
+            <span>Sistema de Mantenimiento</span>
+            <div class="footer-dot"></div>
+            <span>TI 2026</span>
+        </div>
+    </div>
+</div>
+
+<!-- PANEL PRINCIPAL -->
+<div id="mainSection" class="container hidden">
+    <div class="panel-header">
+        <div class="panel-header-left">
+            <img src="https://www.romeropanificados.com.ar/wp-content/uploads/2023/01/Recurso-8.png"
+                 alt="Romero" class="panel-logo" onerror="this.style.display='none'">
+            <div class="panel-header-text">
+                <h2 id="welcomeText">Panel <span class="sync-dot" id="syncDot"></span></h2>
+                <span id="badge" class="role-badge"></span>
+            </div>
+        </div>
+        <button class="btn btn-logout" onclick="logout()">Cerrar sesión</button>
+    </div>
+
+    <div class="tabs">
+        <button class="tab-btn hidden" data-tab="tab-carga"      onclick="activarTab('tab-carga')">Registrar</button>
+        <button class="tab-btn hidden" data-tab="tab-historial"  onclick="activarTab('tab-historial')">Historial</button>
+        <button class="tab-btn hidden" data-tab="tab-aprobacion" onclick="activarTab('tab-aprobacion')">Aprobaciones</button>
+        <button class="tab-btn hidden" data-tab="tab-pagos"      onclick="activarTab('tab-pagos')">Pagos</button>
+        <button class="tab-btn hidden" data-tab="tab-admin"      onclick="activarTab('tab-admin')">Administración</button>
+    </div>
+
+    <!-- TAB: REGISTRAR -->
+    <div id="tab-carga" class="tab-content hidden">
+        <p class="section-title">Nueva pieza</p>
+        <div class="form-grid">
+            <div class="field"><label>Nombre Pieza</label>
+                <input type="text" id="nombrePieza" placeholder="Ej: Correa dentada"></div>
+            <div class="field"><label>Código</label>
+                <input type="text" id="codigoPieza" placeholder="Ej: CD-001"></div>
+            <div class="field"><label>N° Factura</label>
+                <input type="text" id="numFactura" placeholder="Ej: 0001-00012345"></div>
+            <div class="field"><label>Estado</label>
+                <select id="tipoPieza">
+                    <option value="Nueva">Nueva</option>
+                    <option value="Repuesto">Repuesto</option>
+                </select></div>
+            <div class="field"><label>Cantidad</label>
+                <input type="number" id="cantidad" value="1" min="1"></div>
+            <div class="field"><label>Tipo de Precio</label>
+                <select id="modoPrecio" onchange="cambiarEtiquetaPrecio()">
+                    <option value="unitario">Precio por Unidad</option>
+                    <option value="total">Precio Total (Factura)</option>
+                </select></div>
+            <div class="field"><label id="labelMonto">Monto ($)</label>
+                <input type="number" id="valor" class="highlight-input" placeholder="0.00" min="0"></div>
+            <div class="field full-width"><label>Descripción</label>
+                <textarea id="descripcion" placeholder="Observaciones adicionales..."></textarea></div>
+        </div>
+        <button class="btn btn-register" onclick="agregarDato()">✔ Registrar Pieza</button>
+    </div>
+
+    <!-- TAB: HISTORIAL -->
+    <div id="tab-historial" class="tab-content hidden">
+        <p class="section-title">Últimos registros</p>
+        <div id="historialList" class="historial-list"></div>
+    </div>
+
+    <!-- TAB: APROBACIONES -->
+    <div id="tab-aprobacion" class="tab-content hidden">
+        <p class="section-title">
+            Aprobaciones
+            <span id="apReadonlyNotice" class="readonly-notice hidden">👁 Solo lectura</span>
+        </p>
+        <div id="aprobacionResumen" class="resumen-grid"></div>
+        <div class="filtros-row">
+            <button class="filtro-btn active" data-fap="todos"      onclick="renderAprobaciones('todos')">Todos</button>
+            <button class="filtro-btn"        data-fap="pendientes" onclick="renderAprobaciones('pendientes')">Pendientes</button>
+            <button class="filtro-btn"        data-fap="aprobados"  onclick="renderAprobaciones('aprobados')">Aprobados</button>
+            <button class="filtro-btn"        data-fap="rechazados" onclick="renderAprobaciones('rechazados')">Rechazados</button>
+        </div>
+        <div id="aprobacionList" class="aprobacion-list"></div>
+    </div>
+
+    <!-- TAB: PAGOS -->
+    <div id="tab-pagos" class="tab-content hidden">
+        <p class="section-title">
+            Estado de pagos
+            <span style="font-size:11px;color:var(--brown-light);font-family:'Nunito';font-weight:600;font-style:italic;">solo registros aprobados</span>
+        </p>
+        <div id="pagosResumen" class="resumen-grid"></div>
+        <div class="filtros-row">
+            <button class="filtro-btn active" data-fpa="todos"      onclick="renderPagos('todos')">Todos</button>
+            <button class="filtro-btn"        data-fpa="pendientes" onclick="renderPagos('pendientes')">Pendientes</button>
+            <button class="filtro-btn"        data-fpa="pagados"    onclick="renderPagos('pagados')">Pagados</button>
+        </div>
+        <div id="pagosList" class="pagos-list"></div>
+    </div>
+
+    <!-- TAB: ADMINISTRACIÓN -->
+    <div id="tab-admin" class="tab-content hidden">
+        <p class="section-title">Herramientas</p>
+        <div class="admin-actions">
+            <button class="btn btn-excel"  onclick="exportarExcel()">⬇ Descargar Excel</button>
+            <button class="btn btn-danger" id="btnBorrar" onclick="limpiarTodo()">✕ Borrar Historial</button>
+        </div>
+        <p class="section-title">Inversión registrada</p>
+        <div class="chart-wrapper"><canvas id="miGrafica"></canvas></div>
+        <p class="section-title">Comparativa mensual</p>
+        <div id="statsGrid" class="stats-grid"></div>
+    </div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════
+   SUPABASE CONFIG
+════════════════════════════════════════════ */
+const SUPABASE_URL  = 'https://oyvqrxaslamvedfowqdg.supabase.co';
+const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95dnFyeGFzbGFtdmVkZm93cWRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MjI4MjgsImV4cCI6MjA2MDk5ODgyOH0.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* ════════════════════════════════════════════
+   ESTADO GLOBAL
+════════════════════════════════════════════ */
+let inventario = [];
+let userActual = null;
+let filtroAp   = 'todos';
+let filtroPa   = 'todos';
+let miGrafica  = null;
+let realtimeSub = null;
+
+const CLAVES = {
+    guillermo:  'Guillermo123456',
+    supervisor: 'Supervisor.2026',
+    admin:      'Admin.2026',
+    oficina:    'Oficina.2026'
+};
+
+/* ── Helpers ─────────────────────────────── */
+function setSyncDot(estado) {
+    const dot = document.getElementById('syncDot');
+    if (dot) dot.className = 'sync-dot ' + estado;
+}
+
+/* ── Init ────────────────────────────────── */
+window.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('loadingOverlay').classList.add('hidden');
+    document.getElementById('loginSection').classList.remove('hidden');
+});
+
+/* ════════════════════════════════════════════
+   LOGIN / LOGOUT
+════════════════════════════════════════════ */
+function login() {
+    const user = document.getElementById('userSelect').value;
+    const pass = document.getElementById('passInput').value;
+    if (pass !== CLAVES[user]) { alert('Contraseña incorrecta.'); return; }
+
+    userActual = user;
+    document.getElementById('loginSection').classList.add('hidden');
+    document.getElementById('mainSection').classList.remove('hidden');
+
+    const nombres   = { guillermo:'Guillermo', supervisor:'Supervisor', admin:'Administrador', oficina:'Oficina' };
+    const etiquetas = { guillermo:'Carga', supervisor:'Supervisor', admin:'Acceso Total', oficina:'Pagos' };
+    const colores   = { guillermo:'#c8860a', supervisor:'#1a5080', admin:'#7a4a20', oficina:'#1a6080' };
+
+    document.getElementById('welcomeText').innerHTML =
+        'Hola, ' + nombres[user] + ' <span class="sync-dot" id="syncDot"></span>';
+    const badge = document.getElementById('badge');
+    badge.innerText = etiquetas[user];
+    badge.style.backgroundColor = colores[user];
+
+    const btnBorrar = document.getElementById('btnBorrar');
+    if (btnBorrar) btnBorrar.classList.toggle('hidden', user === 'supervisor');
+
+    document.querySelectorAll('.tab-btn').forEach(t => t.classList.add('hidden'));
+    document.querySelectorAll('.tab-content').forEach(t => {
+        t.classList.remove('active'); t.classList.add('hidden');
+    });
+
+    cargarDatos().then(() => {
+        suscribirRealtime();
+        if (user === 'guillermo') {
+            mostrarTabs(['tab-carga','tab-historial']); activarTab('tab-carga');
+        } else if (user === 'supervisor') {
+            mostrarTabs(['tab-carga','tab-historial','tab-aprobacion','tab-admin']); activarTab('tab-carga');
+        } else if (user === 'admin') {
+            mostrarTabs(['tab-carga','tab-historial','tab-aprobacion','tab-admin']); activarTab('tab-aprobacion');
+        } else if (user === 'oficina') {
+            mostrarTabs(['tab-pagos']); activarTab('tab-pagos');
+        }
+    });
+}
+
+function logout() {
+    if (realtimeSub) { sb.removeChannel(realtimeSub); realtimeSub = null; }
+    location.reload();
+}
+
+function mostrarTabs(ids) {
+    ids.forEach(id => {
+        const btn = document.querySelector(`[data-tab="${id}"]`);
+        if (btn) btn.classList.remove('hidden');
+    });
+}
+
+function activarTab(id) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => {
+        c.classList.remove('active'); c.classList.add('hidden');
+    });
+    const btn = document.querySelector(`[data-tab="${id}"]`);
+    const content = document.getElementById(id);
+    if (btn) btn.classList.add('active');
+    if (content) { content.classList.remove('hidden'); content.classList.add('active'); }
+
+    if (id === 'tab-historial')  renderHistorial();
+    if (id === 'tab-aprobacion') renderAprobaciones(filtroAp);
+    if (id === 'tab-pagos')      renderPagos(filtroPa);
+    if (id === 'tab-admin')      { setTimeout(initChart, 100); actualizarComparador(); }
+}
+
+/* ════════════════════════════════════════════
+   SUPABASE — CARGA Y REALTIME
+════════════════════════════════════════════ */
+async function cargarDatos() {
+    setSyncDot('syncing');
+    const { data, error } = await sb
+        .from('inventario')
+        .select('*')
+        .order('timestamp', { ascending: true });
+    if (error) { console.error(error); setSyncDot('error'); return; }
+    inventario = data || [];
+    setSyncDot('ok');
+    refrescarVistaActual();
+}
+
+function suscribirRealtime() {
+    realtimeSub = sb
+        .channel('inventario-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'inventario' }, () => {
+            cargarDatos();
+        })
+        .subscribe();
+}
+
+function refrescarVistaActual() {
+    const tabActivo = document.querySelector('.tab-content.active');
+    if (!tabActivo) return;
+    const id = tabActivo.id;
+    if (id === 'tab-historial')  renderHistorial();
+    if (id === 'tab-aprobacion') renderAprobaciones(filtroAp);
+    if (id === 'tab-pagos')      renderPagos(filtroPa);
+    if (id === 'tab-admin')      { setTimeout(initChart, 100); actualizarComparador(); }
+}
+
+/* ════════════════════════════════════════════
+   REGISTRAR PIEZA
+════════════════════════════════════════════ */
+function cambiarEtiquetaPrecio() {
+    const modo = document.getElementById('modoPrecio').value;
+    document.getElementById('labelMonto').innerText =
+        modo === 'unitario' ? 'Precio por Unidad ($)' : 'Precio Total de Factura ($)';
+}
+
+async function agregarDato() {
+    const nombre = document.getElementById('nombrePieza').value.trim();
+    const cant   = parseInt(document.getElementById('cantidad').value) || 0;
+    const monto  = parseFloat(document.getElementById('valor').value) || 0;
+    const modo   = document.getElementById('modoPrecio').value;
+
+    if (!nombre || cant <= 0 || monto <= 0) {
+        alert('Completá los datos de Pieza, Cantidad y Monto.');
+        return;
+    }
+
+    let precioUnitario, precioTotal;
+    if (modo === 'unitario') { precioUnitario = monto; precioTotal = monto * cant; }
+    else { precioTotal = monto; precioUnitario = monto / cant; }
+
+    const ahora = new Date();
+    const registro = {
+        timestamp:    Date.now(),
+        Mes:          ahora.toLocaleString('es-ES', { month: 'long' }),
+        Fecha:        ahora.toLocaleDateString('es-AR'),
+        Hora:         ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        Usuario:      userActual,
+        Pieza:        nombre,
+        Codigo:       document.getElementById('codigoPieza').value.trim(),
+        Factura:      document.getElementById('numFactura').value.trim(),
+        Estado:       document.getElementById('tipoPieza').value,
+        Cantidad:     cant,
+        Precio_Unit:  precioUnitario.toFixed(2),
+        Total:        precioTotal.toFixed(2),
+        Modo_Ingreso: modo,
+        Descripcion:  document.getElementById('descripcion').value.trim(),
+        Aprobado:     null,
+        Comentario:   '',
+        Pagado:       false
+    };
+
+    setSyncDot('syncing');
+    const { error } = await sb.from('inventario').insert([registro]);
+    if (error) { alert('Error al guardar: ' + error.message); setSyncDot('error'); return; }
+
+    setSyncDot('ok');
+    alert('¡Registro exitoso!');
+    ['nombrePieza','codigoPieza','numFactura','valor','descripcion'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+    document.getElementById('cantidad').value = '1';
+}
+
+/* ════════════════════════════════════════════
+   HISTORIAL
+════════════════════════════════════════════ */
+function renderHistorial() {
+    const lista = document.getElementById('historialList');
+    if (!lista) return;
+
+    let items = userActual === 'guillermo'
+        ? [...inventario].filter(r => r.Usuario === 'guillermo').reverse()
+        : [...inventario].reverse();
+
+    if (items.length === 0) {
+        lista.innerHTML = '<p class="historial-empty">No hay registros todavía.</p>';
+        return;
+    }
+
+    lista.innerHTML = items.slice(0, 80).map(r => {
+        const ec = r.Aprobado === true ? 'aprobado' : r.Aprobado === false ? 'rechazado' : 'pendiente';
+        const el = r.Aprobado === true ? '✓ Aprobado' : r.Aprobado === false ? '✕ Rechazado' : '⏳ Pendiente';
+        return `
+        <div class="historial-item">
+            <div class="historial-info">
+                <div class="historial-nombre">${r.Pieza}</div>
+                <div class="historial-meta">
+                    ${r.Estado} · Cant: ${r.Cantidad}
+                    ${r.Factura ? '· Fac: ' + r.Factura : ''}
+                    ${r.Codigo  ? '· Cód: ' + r.Codigo  : ''}
+                    · Por: ${r.Usuario}
+                </div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+                <div class="historial-total">$${parseFloat(r.Total).toLocaleString('es-AR')}</div>
+                <span class="estado-badge ${ec}">${el}</span>
+                <div class="historial-fecha">${r.Fecha} ${r.Hora}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+/* ════════════════════════════════════════════
+   APROBACIONES
+════════════════════════════════════════════ */
+function renderAprobaciones(filtro) {
+    filtroAp = filtro;
+    document.querySelectorAll('[data-fap]').forEach(b =>
+        b.classList.toggle('active', b.dataset.fap === filtro));
+
+    const notice = document.getElementById('apReadonlyNotice');
+    if (notice) notice.classList.toggle('hidden', userActual !== 'supervisor');
+
+    const resumen = document.getElementById('aprobacionResumen');
+    const lista   = document.getElementById('aprobacionList');
+    if (!lista) return;
+
+    const nAprobados = inventario.filter(r => r.Aprobado === true).length;
+    const nRechaz    = inventario.filter(r => r.Aprobado === false).length;
+    const nPend      = inventario.filter(r => r.Aprobado === null).length;
+
+    if (resumen) {
+        resumen.innerHTML = `
+            <div class="resumen-card"><div class="resumen-label">Total</div>
+                <div class="resumen-valor">${inventario.length}</div></div>
+            <div class="resumen-card amarillo"><div class="resumen-label">Pendientes</div>
+                <div class="resumen-valor">${nPend}</div></div>
+            <div class="resumen-card verde"><div class="resumen-label">Aprobados</div>
+                <div class="resumen-valor">${nAprobados}</div></div>
+            <div class="resumen-card rojo"><div class="resumen-label">Rechazados</div>
+                <div class="resumen-valor">${nRechaz}</div></div>`;
+    }
+
+    let items = [...inventario].reverse();
+    if (filtro === 'pendientes') items = items.filter(r => r.Aprobado === null);
+    if (filtro === 'aprobados')  items = items.filter(r => r.Aprobado === true);
+    if (filtro === 'rechazados') items = items.filter(r => r.Aprobado === false);
+
+    if (items.length === 0) {
+        lista.innerHTML = '<p class="ap-empty">No hay registros en esta categoría.</p>';
+        return;
+    }
+
+    const puedeAccionar = userActual === 'admin';
+
+    lista.innerHTML = items.map(r => {
+        const ec = r.Aprobado === true ? 'aprobado' : r.Aprobado === false ? 'rechazado' : 'pendiente';
+        const el = r.Aprobado === true ? '✓ Aprobado' : r.Aprobado === false ? '✕ Rechazado' : '⏳ Pendiente';
+        const itemClass = r.Aprobado === true ? 'ap-aprobado' : r.Aprobado === false ? 'ap-rechazado' : '';
+
+        let acciones = '';
+        if (puedeAccionar) {
+            if (r.Aprobado === null) {
+                acciones = `
+                    <textarea class="comentario-input" id="com-${r.id}"
+                        placeholder="Comentario opcional..."></textarea>
+                    <div class="ap-acciones">
+                        <button class="btn-ap aprobar"  onclick="aprobar(${r.id})">✓ Aprobar</button>
+                        <button class="btn-ap rechazar" onclick="rechazar(${r.id})">✕ Rechazar</button>
+                    </div>`;
+            } else {
+                acciones = `
+                    <div class="ap-acciones">
+                        <button class="btn-ap deshacer" onclick="deshacerDecision(${r.id})">↩ Deshacer</button>
+                    </div>
+                    ${r.Comentario ? `<div class="comentario-guardado"><strong>Comentario:</strong> ${r.Comentario}</div>` : ''}`;
+            }
+        } else {
+            acciones = r.Comentario
+                ? `<div class="comentario-guardado"><strong>Comentario del admin:</strong> ${r.Comentario}</div>`
+                : '';
+        }
+
+        return `
+        <div class="aprobacion-item ${itemClass}">
+            <div class="ap-top">
+                <div class="ap-info">
+                    <div class="ap-nombre">${r.Pieza}</div>
+                    <div class="ap-meta">
+                        ${r.Fecha} ${r.Hora} · ${r.Estado} · Cant: ${r.Cantidad}<br>
+                        ${r.Factura ? 'Fac: ' + r.Factura + ' · ' : ''}
+                        ${r.Codigo  ? 'Cód: ' + r.Codigo  + ' · ' : ''}
+                        Cargado por: <strong>${r.Usuario}</strong>
+                    </div>
+                </div>
+                <div class="ap-right">
+                    <div class="ap-total">$${parseFloat(r.Total).toLocaleString('es-AR')}</div>
+                    <span class="estado-badge ${ec}">${el}</span>
+                </div>
+            </div>
+            ${acciones}
+        </div>`;
+    }).join('');
+}
+
+async function aprobar(id) {
+    const comentario = document.getElementById(`com-${id}`)?.value.trim() || '';
+    setSyncDot('syncing');
+    await sb.from('inventario').update({ Aprobado: true, Comentario: comentario, Pagado: false }).eq('id', id);
+    setSyncDot('ok');
+    await cargarDatos();
+}
+
+async function rechazar(id) {
+    const comentario = document.getElementById(`com-${id}`)?.value.trim() || '';
+    setSyncDot('syncing');
+    await sb.from('inventario').update({ Aprobado: false, Comentario: comentario }).eq('id', id);
+    setSyncDot('ok');
+    await cargarDatos();
+}
+
+async function deshacerDecision(id) {
+    setSyncDot('syncing');
+    await sb.from('inventario').update({ Aprobado: null, Comentario: '', Pagado: false }).eq('id', id);
+    setSyncDot('ok');
+    await cargarDatos();
+}
+
+/* ════════════════════════════════════════════
+   PAGOS (OFICINA)
+════════════════════════════════════════════ */
+function renderPagos(filtro) {
+    filtroPa = filtro;
+    document.querySelectorAll('[data-fpa]').forEach(b =>
+        b.classList.toggle('active', b.dataset.fpa === filtro));
+
+    const lista   = document.getElementById('pagosList');
+    const resumen = document.getElementById('pagosResumen');
+    if (!lista) return;
+
+    const aprobados     = inventario.filter(r => r.Aprobado === true);
+    const sumaPagada    = aprobados.filter(r => r.Pagado).reduce((a, r) => a + parseFloat(r.Total), 0);
+    const sumaPendiente = aprobados.filter(r => !r.Pagado).reduce((a, r) => a + parseFloat(r.Total), 0);
+
+    if (resumen) {
+        resumen.innerHTML = `
+            <div class="resumen-card"><div class="resumen-label">Aprobados</div>
+                <div class="resumen-valor">${aprobados.length}</div></div>
+            <div class="resumen-card verde"><div class="resumen-label">Pagado</div>
+                <div class="resumen-valor">$${sumaPagada.toLocaleString('es-AR',{maximumFractionDigits:0})}</div></div>
+            <div class="resumen-card amarillo"><div class="resumen-label">Pendiente de pago</div>
+                <div class="resumen-valor">$${sumaPendiente.toLocaleString('es-AR',{maximumFractionDigits:0})}</div></div>`;
+    }
+
+    let items = [...aprobados].reverse();
+    if (filtro === 'pagados')    items = items.filter(r => r.Pagado);
+    if (filtro === 'pendientes') items = items.filter(r => !r.Pagado);
+
+    if (items.length === 0) {
+        lista.innerHTML = '<p class="pagos-empty">No hay registros en esta categoría.</p>';
+        return;
+    }
+
+    lista.innerHTML = items.map(r => `
+        <div class="pago-item ${r.Pagado ? 'pagado' : ''}">
+            <div class="pago-info">
+                <div class="pago-nombre">${r.Pieza}</div>
+                <div class="pago-meta">
+                    ${r.Fecha} · ${r.Estado} · Cant: ${r.Cantidad}
+                    ${r.Factura ? '· Fac: ' + r.Factura : ''}
+                    ${r.Comentario ? ' · <em>' + r.Comentario + '</em>' : ''}
+                </div>
+            </div>
+            <div class="pago-right">
+                <div class="pago-total">$${parseFloat(r.Total).toLocaleString('es-AR')}</div>
+                <button class="pago-toggle ${r.Pagado ? 'pagado-btn' : ''}" onclick="togglePago(${r.id})">
+                    <span class="pago-dot"></span>
+                    ${r.Pagado ? 'Pagado' : 'Pendiente'}
+                </button>
+            </div>
+        </div>`).join('');
+}
+
+async function togglePago(id) {
+    const item = inventario.find(r => r.id === id);
+    if (!item) return;
+    setSyncDot('syncing');
+    await sb.from('inventario').update({ Pagado: !item.Pagado }).eq('id', id);
+    setSyncDot('ok');
+    await cargarDatos();
+}
+
+/* ════════════════════════════════════════════
+   GRÁFICA
+════════════════════════════════════════════ */
+function initChart() {
+    const ctx = document.getElementById('miGrafica');
+    if (!ctx) return;
+    if (miGrafica) miGrafica.destroy();
+    miGrafica = new Chart(ctx.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: inventario.map(d => d.Fecha + ' ' + d.Hora),
+            datasets: [{
+                label: 'Inversión ($)',
+                data: inventario.map(d => parseFloat(d.Total)),
+                borderColor: '#c8860a',
+                backgroundColor: 'rgba(200,134,10,0.10)',
+                pointBackgroundColor: '#c8420a',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+                pointRadius: 5,
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { labels: { color:'#7a4a20', font:{ family:'Nunito', weight:'700', size:13 } } } },
+            scales: {
+                x: { ticks:{color:'#a07840',font:{family:'Nunito',size:11}}, grid:{color:'rgba(200,160,90,0.12)'} },
+                y: { ticks:{color:'#a07840',font:{family:'Nunito',size:11}}, grid:{color:'rgba(200,160,90,0.12)'} }
+            }
+        }
+    });
+}
+
+/* ════════════════════════════════════════════
+   COMPARATIVA MENSUAL
+════════════════════════════════════════════ */
+function actualizarComparador() {
+    const grid = document.getElementById('statsGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    const totales = inventario.reduce((acc, curr) => {
+        acc[curr.Mes] = (acc[curr.Mes] || 0) + parseFloat(curr.Total);
+        return acc;
+    }, {});
+    for (const [mes, dinero] of Object.entries(totales)) {
+        grid.innerHTML += `
+            <div class="stat-card">
+                <div class="stat-month">${mes}</div>
+                <div class="stat-value">$${dinero.toLocaleString('es-AR',{maximumFractionDigits:0})}</div>
+            </div>`;
+    }
+}
+
+/* ════════════════════════════════════════════
+   EXCEL
+════════════════════════════════════════════ */
+function exportarExcel() {
+    if (inventario.length === 0) { alert('No hay registros para exportar.'); return; }
+    const wb = XLSX.utils.book_new();
+    const meses = [...new Set(inventario.map(r => r.Mes))];
+    meses.forEach(mes => {
+        const ws = XLSX.utils.json_to_sheet(inventario.filter(r => r.Mes === mes));
+        XLSX.utils.book_append_sheet(wb, ws, mes.toUpperCase());
+    });
+    XLSX.writeFile(wb, 'Inventario_RomeroPanificados.xlsx');
+}
+
+/* ════════════════════════════════════════════
+   BORRAR HISTORIAL
+════════════════════════════════════════════ */
+async function limpiarTodo() {
+    if (!confirm('¿Borrar todo el historial? Esta acción no se puede deshacer.')) return;
+    setSyncDot('syncing');
+    await sb.from('inventario').delete().neq('id', 0);
+    setSyncDot('ok');
+    inventario = [];
+    refrescarVistaActual();
+}
+</script>
+</body>
+</html>
