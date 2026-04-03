@@ -2,9 +2,8 @@
    SUPABASE CONFIG
 ══════════════════════════════════════════════════════ */
 const SUPABASE_URL = 'https://oyvqrxaslamvedfowqdg.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95dnFyeGFzbGFtdmVkZm93cWRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU0MjI4MjgsImV4cCI6MjA2MDk5ODgyOH0.eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95dnFyeGFzbGFtdmVkZm93cWRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNTMyMzEsImV4cCI6MjA5MDcyOTIzMX0.kBIMpczUhcjKHzQBWm9zwVAYUHCZR_Z9agYfeuj5ADo';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
 /* ══════════════════════════════════════════════════════
    ESTADO GLOBAL
 ══════════════════════════════════════════════════════ */
