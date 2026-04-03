@@ -4,7 +4,7 @@
 const SUPABASE_URL = 'https://oyvqrxaslamvedfowqdg.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95dnFyeGFzbGFtdmVkZm93cWRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNTMyMzEsImV4cCI6MjA5MDcyOTIzMX0.kBIMpczUhcjKHzQBWm9zwVAYUHCZR_Z9agYfeuj5ADo';
 
-// Usamos la librería cargada globalmente
+// Conexión con la librería global de Supabase
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const USERS_DB = {
@@ -19,7 +19,7 @@ let currentUserRole = null;
 let registrosGlobales = [];
 
 /* ══════════════════════════════════════════════════════
-   2. FUNCIONES DE ACCESO
+   2. ACCESO Y ROLES
 ══════════════════════════════════════════════════════ */
 async function login() {
     const userKey = document.getElementById('userSelect').value;
@@ -45,10 +45,10 @@ function configurarInterfazPorRol(rol) {
     const badge = document.getElementById('userRoleBadge');
     if(badge) {
         badge.innerText = rol.toUpperCase();
-        if(rol === 'supervisor') badge.style.background = '#d4af37';
+        if(rol === 'supervisor') badge.style.background = '#d4af37'; // Dorado para el Super
     }
     
-    // El Supervisor y Admin ven la pestaña de administración si existe
+    // El Supervisor y Admin ven opciones de gestión
     const tabAdmin = document.querySelector('[data-tab="tab-admin"]');
     if ((rol !== 'admin' && rol !== 'supervisor') && tabAdmin) {
         tabAdmin.classList.add('hidden');
@@ -56,11 +56,11 @@ function configurarInterfazPorRol(rol) {
 }
 
 /* ══════════════════════════════════════════════════════
-   3. LÓGICA DE DATOS (RESTABLECIDA)
+   3. GESTIÓN DE PIEZAS (CON OBSERVACIONES)
 ══════════════════════════════════════════════════════ */
 async function cargarDatos() {
     const container = document.getElementById('listaRegistros');
-    container.innerHTML = '<div class="lista-empty">Cargando historial...</div>';
+    container.innerHTML = '<div class="lista-empty">Sincronizando...</div>';
 
     try {
         const { data, error } = await sb.from('inventario').select('*').order('fecha', { ascending: false });
@@ -93,7 +93,7 @@ function renderizarLista(items) {
                     </span>
                 </div>
             </div>
-            ${item.comentario ? `<div class="comentario-guardado"><strong>Obs:</strong> ${item.comentario}</div>` : ''}
+            ${item.comentario ? `<div class="comentario-guardado"><strong>Nota Super:</strong> ${item.comentario}</div>` : ''}
             ${renderAcciones(item)}
         </div>
     `).join('');
@@ -103,22 +103,22 @@ function renderAcciones(item) {
     if (currentUserRole === 'carga') return '';
     let html = '<div class="rc-acciones">';
     
-    // Supervisor habilita, Oficina/Admin confirma pago
+    // Lógica de habilitación y pago
     if (item.estado_pago === 'pendiente' && (currentUserRole === 'supervisor' || currentUserRole === 'admin')) {
         html += `<button class="btn-accion aprobar" onclick="cambiarEstado('${item.id}', 'aprobado')">Habilitar Pago</button>`;
     } else if (item.estado_pago === 'aprobado' && (currentUserRole === 'oficina' || currentUserRole === 'admin')) {
         html += `<button class="btn-accion pagar" onclick="cambiarEstado('${item.id}', 'pagado')">Confirmar Pago</button>`;
     }
 
-    // Sistema de comentarios para revisión
+    // Campo de comentarios para el Supervisor
     if (currentUserRole === 'supervisor' || currentUserRole === 'admin') {
-        html += `<textarea class="comentario-input" placeholder="Nota..." onblur="guardarComentario('${item.id}', this.value)"></textarea>`;
+        html += `<textarea class="comentario-input" placeholder="Nota de revisión..." onblur="guardarComentario('${item.id}', this.value)"></textarea>`;
     }
     return html + '</div>';
 }
 
 /* ══════════════════════════════════════════════════════
-   4. INICIALIZACIÓN Y EXPOSICIÓN
+   4. UTILIDADES Y EXPOSICIÓN GLOBAL
 ══════════════════════════════════════════════════════ */
 async function cambiarEstado(id, nuevoEstado) {
     await sb.from('inventario').update({ estado_pago: nuevoEstado }).eq('id', id);
@@ -133,20 +133,21 @@ async function guardarComentario(id, texto) {
 
 function switchTab(tabId) {
     document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
-    document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+    const target = document.querySelector(`[data-tab="${tabId}"]`);
+    if(target) target.classList.add('active');
     document.getElementById(tabId).classList.add('active');
     if (tabId === 'tab-historial') cargarDatos();
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-    // Esto quita el logo de Romero y muestra el login
+    // Quita la pantalla de carga blanca/logo
     setTimeout(() => {
         const loader = document.getElementById('loadingOverlay');
         if (loader) loader.classList.add('hidden');
-    }, 1000);
+    }, 1200);
 });
 
-// Hacer funciones disponibles para los botones
+// Exponemos las funciones para que el HTML las vea
 window.login = login;
 window.switchTab = switchTab;
 window.cambiarEstado = cambiarEstado;
