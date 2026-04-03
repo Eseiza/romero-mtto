@@ -1,12 +1,12 @@
 /* ══════════════════════════════════════════════════════
-   1. CONFIGURACIÓN DE SUPABASE
+   CONFIGURACIÓN DE SUPABASE
 ══════════════════════════════════════════════════════ */
 const SUPABASE_URL = 'https://oyvqrxaslamvedfowqdg.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95dnFyeGFzbGFtdmVkZm93cWRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNTMyMzEsImV4cCI6MjA5MDcyOTIzMX0.kBIMpczUhcjKHzQBWm9zwVAYUHCZR_Z9agYfeuj5ADo';
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-/* ── USUARIOS Y ROLES (RESTABLECIDO) ────────────────── */
+/* ── BASE DE USUARIOS INTEGRAL ─────────────────────── */
 const USERS_DB = {
     "guillermo": { pass: "guille2026", role: "carga" },
     "supervisor": { pass: "super123",  role: "supervisor" },
@@ -19,7 +19,7 @@ let currentUserRole = null;
 let registrosGlobales = [];
 
 /* ══════════════════════════════════════════════════════
-   2. ACCESO Y SEGURIDAD
+   LÓGICA DE ACCESO
 ══════════════════════════════════════════════════════ */
 async function login() {
     const userKey = document.getElementById('userSelect').value;
@@ -37,7 +37,7 @@ async function login() {
         configurarInterfazPorRol(userData.role);
         cargarDatos();
     } else {
-        alert("Contraseña incorrecta.");
+        alert("Credenciales incorrectas.");
     }
 }
 
@@ -45,7 +45,7 @@ function configurarInterfazPorRol(rol) {
     const badge = document.getElementById('userRoleBadge');
     if(badge) {
         badge.innerText = rol.toUpperCase();
-        if(rol === 'supervisor') badge.style.background = '#d4af37'; // Gold
+        if(rol === 'supervisor') badge.style.background = '#d4af37';
     }
     
     const tabAdmin = document.querySelector('[data-tab="tab-admin"]');
@@ -55,10 +55,9 @@ function configurarInterfazPorRol(rol) {
 }
 
 /* ══════════════════════════════════════════════════════
-   3. GESTIÓN DE DATOS (CRUD)
+   GESTIÓN DE DATOS Y RENDERIZADO
 ══════════════════════════════════════════════════════ */
 async function guardarPieza() {
-    const btn = document.querySelector('.btn-register');
     const datos = {
         nombre_pieza: document.getElementById('nombrePieza').value,
         codigo: document.getElementById('codigoPieza').value,
@@ -73,17 +72,13 @@ async function guardarPieza() {
     };
 
     try {
-        btn.disabled = true;
         const { error } = await sb.from('inventario').insert([datos]);
         if (error) throw error;
-        
-        alert("Registrado correctamente.");
+        alert("¡Pieza registrada!");
         limpiarFormulario();
         switchTab('tab-historial');
     } catch (err) {
         alert("Error al guardar: " + err.message);
-    } finally {
-        btn.disabled = false;
     }
 }
 
@@ -97,20 +92,12 @@ async function cargarDatos() {
         registrosGlobales = data;
         renderizarLista(data);
     } catch (err) {
-        container.innerHTML = `<div class="lista-empty">Error: ${err.message}</div>`;
+        container.innerHTML = `<div class="lista-empty">Error de conexión.</div>`;
     }
 }
 
-/* ══════════════════════════════════════════════════════
-   4. RENDERIZADO E INTERACCIÓN
-══════════════════════════════════════════════════════ */
 function renderizarLista(items) {
     const container = document.getElementById('listaRegistros');
-    if (items.length === 0) {
-        container.innerHTML = '<div class="lista-empty">No hay registros.</div>';
-        return;
-    }
-
     container.innerHTML = items.map(item => `
         <div class="registro-card estado-${item.estado_pago}">
             <div class="rc-top">
@@ -147,6 +134,9 @@ function renderAcciones(item) {
     return html + '</div>';
 }
 
+/* ══════════════════════════════════════════════════════
+   UTILIDADES Y EXPOSICIÓN GLOBAL
+══════════════════════════════════════════════════════ */
 async function cambiarEstado(id, nuevoEstado) {
     await sb.from('inventario').update({ estado_pago: nuevoEstado }).eq('id', id);
     cargarDatos();
@@ -177,7 +167,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }, 1500);
 });
 
-// EXPOSICIÓN GLOBAL
+// EXPOSICIÓN PARA HTML
 window.login = login;
 window.switchTab = switchTab;
 window.guardarPieza = guardarPieza;
