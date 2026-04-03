@@ -6,20 +6,20 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-/* ── BASE DE USUARIOS (INCLUYE SUPERVISOR) ─────────── */
+/* ── USUARIOS Y ROLES (RESTABLECIDO) ────────────────── */
 const USERS_DB = {
     "guillermo": { pass: "guille2026", role: "carga" },
     "supervisor": { pass: "super123",  role: "supervisor" },
-    "oficina":    { pass: "oficina26",  role: "oficina" },
+    "oficina":    { pass: "oficina77",  role: "oficina" },
     "admin":      { pass: "adminromero", role: "admin" }
 };
 
-let currentUser = null;
-let currentRole = null;
+let currentUserName = null;
+let currentUserRole = null;
 let registrosGlobales = [];
 
 /* ══════════════════════════════════════════════════════
-   2. LÓGICA DE ACCESO
+   2. ACCESO Y SEGURIDAD
 ══════════════════════════════════════════════════════ */
 async function login() {
     const userKey = document.getElementById('userSelect').value;
@@ -27,17 +27,17 @@ async function login() {
     const userData = USERS_DB[userKey];
 
     if (userData && passInput === userData.pass) {
-        currentUser = userKey.charAt(0).toUpperCase() + userKey.slice(1);
-        currentRole = userData.role;
+        currentUserName = userKey.charAt(0).toUpperCase() + userKey.slice(1);
+        currentUserRole = userData.role;
 
         document.querySelector('.login-wrap').classList.add('hidden');
         document.getElementById('mainApp').classList.remove('hidden');
         
-        document.getElementById('userNameDisplay').innerText = `Hola, ${currentUser}`;
+        document.getElementById('userNameDisplay').innerText = `Hola, ${currentUserName}`;
         configurarInterfazPorRol(userData.role);
         cargarDatos();
     } else {
-        alert("Credenciales incorrectas.");
+        alert("Contraseña incorrecta.");
     }
 }
 
@@ -45,12 +45,9 @@ function configurarInterfazPorRol(rol) {
     const badge = document.getElementById('userRoleBadge');
     if(badge) {
         badge.innerText = rol.toUpperCase();
-        // Colores de badge según rol
-        if(rol === 'supervisor') badge.style.background = 'var(--gold)';
-        if(rol === 'admin') badge.style.background = 'var(--red)';
+        if(rol === 'supervisor') badge.style.background = '#d4af37'; // Gold
     }
     
-    // Control de pestañas
     const tabAdmin = document.querySelector('[data-tab="tab-admin"]');
     if ((rol !== 'admin' && rol !== 'supervisor') && tabAdmin) {
         tabAdmin.classList.add('hidden');
@@ -58,7 +55,7 @@ function configurarInterfazPorRol(rol) {
 }
 
 /* ══════════════════════════════════════════════════════
-   3. FUNCIONES DE DATOS (CRUD)
+   3. GESTIÓN DE DATOS (CRUD)
 ══════════════════════════════════════════════════════ */
 async function guardarPieza() {
     const btn = document.querySelector('.btn-register');
@@ -79,11 +76,12 @@ async function guardarPieza() {
         btn.disabled = true;
         const { error } = await sb.from('inventario').insert([datos]);
         if (error) throw error;
+        
         alert("Registrado correctamente.");
         limpiarFormulario();
         switchTab('tab-historial');
     } catch (err) {
-        alert("Error: " + err.message);
+        alert("Error al guardar: " + err.message);
     } finally {
         btn.disabled = false;
     }
@@ -104,7 +102,7 @@ async function cargarDatos() {
 }
 
 /* ══════════════════════════════════════════════════════
-   4. RENDERIZADO (TARJETAS + SEMÁFORO + COMENTARIOS)
+   4. RENDERIZADO E INTERACCIÓN
 ══════════════════════════════════════════════════════ */
 function renderizarLista(items) {
     const container = document.getElementById('listaRegistros');
@@ -118,8 +116,7 @@ function renderizarLista(items) {
             <div class="rc-top">
                 <div class="rc-info">
                     <div class="rc-nombre">${item.nombre_pieza}</div>
-                    <div class="rc-meta">Factura: ${item.n_factura} | Código: ${item.codigo}</div>
-                    <div class="rc-meta">Estado Físico: <strong>${item.estado_pieza}</strong></div>
+                    <div class="rc-meta">Factura: ${item.n_factura} | Estado: ${item.estado_pieza}</div>
                 </div>
                 <div class="rc-right">
                     <div class="rc-total">$${item.monto.toLocaleString()}</div>
@@ -128,54 +125,37 @@ function renderizarLista(items) {
                     </span>
                 </div>
             </div>
-            
-            ${item.comentario ? `<div class="comentario-guardado"><strong>Nota:</strong> ${item.comentario}</div>` : ''}
-
+            ${item.comentario ? `<div class="comentario-guardado"><strong>Obs:</strong> ${item.comentario}</div>` : ''}
             ${renderAcciones(item)}
         </div>
     `).join('');
 }
 
 function renderAcciones(item) {
-    // El rol "Carga" no ve botones de acción
-    if (currentRole === 'carga') return '';
-
+    if (currentUserRole === 'carga') return '';
     let html = '<div class="rc-acciones">';
     
-    // Lógica de Supervisor/Oficina/Admin
-    if (item.estado_pago === 'pendiente') {
+    if (item.estado_pago === 'pendiente' && (currentUserRole === 'supervisor' || currentUserRole === 'admin')) {
         html += `<button class="btn-accion aprobar" onclick="cambiarEstado('${item.id}', 'aprobado')">Habilitar Pago</button>`;
-    } else if (item.estado_pago === 'aprobado' && (currentRole !== 'supervisor')) {
-        // Supervisor habilita, pero Oficina/Admin marcan como pagado
+    } else if (item.estado_pago === 'aprobado' && (currentUserRole === 'oficina' || currentUserRole === 'admin')) {
         html += `<button class="btn-accion pagar" onclick="cambiarEstado('${item.id}', 'pagado')">Confirmar Pago</button>`;
     }
 
-    // Input de comentario (disponible para Supervisor y Admin)
-    if (currentRole === 'supervisor' || currentRole === 'admin') {
-        html += `<textarea class="comentario-input" placeholder="Agregar observación..." onblur="guardarComentario('${item.id}', this.value)"></textarea>`;
+    if (currentUserRole === 'supervisor' || currentUserRole === 'admin') {
+        html += `<textarea class="comentario-input" placeholder="Nota de revisión..." onblur="guardarComentario('${item.id}', this.value)"></textarea>`;
     }
-
-    html += '</div>';
-    return html;
+    return html + '</div>';
 }
 
-/* ══════════════════════════════════════════════════════
-   5. ACTUALIZACIONES Y UTILIDADES
-══════════════════════════════════════════════════════ */
 async function cambiarEstado(id, nuevoEstado) {
-    try {
-        const { error } = await sb.from('inventario').update({ estado_pago: nuevoEstado }).eq('id', id);
-        if (error) throw error;
-        cargarDatos();
-    } catch (err) { alert(err.message); }
+    await sb.from('inventario').update({ estado_pago: nuevoEstado }).eq('id', id);
+    cargarDatos();
 }
 
 async function guardarComentario(id, texto) {
-    if(!texto) return;
-    try {
-        await sb.from('inventario').update({ comentario: texto }).eq('id', id);
-        cargarDatos();
-    } catch (err) { console.error(err); }
+    if(!texto.trim()) return;
+    await sb.from('inventario').update({ comentario: texto }).eq('id', id);
+    cargarDatos();
 }
 
 function switchTab(tabId) {
@@ -185,24 +165,22 @@ function switchTab(tabId) {
     if (tabId === 'tab-historial') cargarDatos();
 }
 
-function filtrar(tipo) {
-    document.querySelectorAll('.filtro-btn').forEach(b => b.classList.remove('active'));
-    event.currentTarget.classList.add('active');
-    const filtrados = tipo === 'todos' ? registrosGlobales : registrosGlobales.filter(r => r.estado_pago === tipo);
-    renderizarLista(filtrados);
-}
-
 function limpiarFormulario() {
-    document.querySelectorAll('input, textarea, select').forEach(i => {
-        if(i.id !== 'userSelect') i.value = '';
-    });
+    document.querySelectorAll('input, textarea').forEach(i => i.value = '');
 }
 
-// Exposición global
+// INICIALIZACIÓN
+window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        const loader = document.getElementById('loadingOverlay');
+        if (loader) loader.classList.add('hidden');
+    }, 1500);
+});
+
+// EXPOSICIÓN GLOBAL
 window.login = login;
 window.switchTab = switchTab;
 window.guardarPieza = guardarPieza;
 window.cambiarEstado = cambiarEstado;
-window.filtrar = filtrar;
 window.guardarComentario = guardarComentario;
 window.logout = () => location.reload();
