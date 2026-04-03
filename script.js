@@ -1,12 +1,12 @@
 /* ══════════════════════════════════════════════════════
-   CONFIGURACIÓN DE SUPABASE
+   1. CONFIGURACIÓN E INICIALIZACIÓN
 ══════════════════════════════════════════════════════ */
 const SUPABASE_URL = 'https://oyvqrxaslamvedfowqdg.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im95dnFyeGFzbGFtdmVkZm93cWRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNTMyMzEsImV4cCI6MjA5MDcyOTIzMX0.kBIMpczUhcjKHzQBWm9zwVAYUHCZR_Z9agYfeuj5ADo';
 
+// Usamos la librería cargada globalmente
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-/* ── BASE DE USUARIOS INTEGRAL ─────────────────────── */
 const USERS_DB = {
     "guillermo": { pass: "guille2026", role: "carga" },
     "supervisor": { pass: "super123",  role: "supervisor" },
@@ -19,7 +19,7 @@ let currentUserRole = null;
 let registrosGlobales = [];
 
 /* ══════════════════════════════════════════════════════
-   LÓGICA DE ACCESO
+   2. FUNCIONES DE ACCESO
 ══════════════════════════════════════════════════════ */
 async function login() {
     const userKey = document.getElementById('userSelect').value;
@@ -37,7 +37,7 @@ async function login() {
         configurarInterfazPorRol(userData.role);
         cargarDatos();
     } else {
-        alert("Credenciales incorrectas.");
+        alert("Contraseña incorrecta.");
     }
 }
 
@@ -48,6 +48,7 @@ function configurarInterfazPorRol(rol) {
         if(rol === 'supervisor') badge.style.background = '#d4af37';
     }
     
+    // El Supervisor y Admin ven la pestaña de administración si existe
     const tabAdmin = document.querySelector('[data-tab="tab-admin"]');
     if ((rol !== 'admin' && rol !== 'supervisor') && tabAdmin) {
         tabAdmin.classList.add('hidden');
@@ -55,36 +56,11 @@ function configurarInterfazPorRol(rol) {
 }
 
 /* ══════════════════════════════════════════════════════
-   GESTIÓN DE DATOS Y RENDERIZADO
+   3. LÓGICA DE DATOS (RESTABLECIDA)
 ══════════════════════════════════════════════════════ */
-async function guardarPieza() {
-    const datos = {
-        nombre_pieza: document.getElementById('nombrePieza').value,
-        codigo: document.getElementById('codigoPieza').value,
-        n_factura: document.getElementById('nFactura').value,
-        estado_pieza: document.getElementById('estadoPieza').value,
-        cantidad: parseInt(document.getElementById('cantidadPieza').value) || 0,
-        tipo_precio: document.getElementById('tipoPrecio').value,
-        monto: parseFloat(document.getElementById('montoPieza').value) || 0,
-        descripcion: document.getElementById('descripcionPieza').value,
-        estado_pago: 'pendiente',
-        fecha: new Date().toISOString()
-    };
-
-    try {
-        const { error } = await sb.from('inventario').insert([datos]);
-        if (error) throw error;
-        alert("¡Pieza registrada!");
-        limpiarFormulario();
-        switchTab('tab-historial');
-    } catch (err) {
-        alert("Error al guardar: " + err.message);
-    }
-}
-
 async function cargarDatos() {
     const container = document.getElementById('listaRegistros');
-    container.innerHTML = '<div class="lista-empty">Sincronizando...</div>';
+    container.innerHTML = '<div class="lista-empty">Cargando historial...</div>';
 
     try {
         const { data, error } = await sb.from('inventario').select('*').order('fecha', { ascending: false });
@@ -92,12 +68,17 @@ async function cargarDatos() {
         registrosGlobales = data;
         renderizarLista(data);
     } catch (err) {
-        container.innerHTML = `<div class="lista-empty">Error de conexión.</div>`;
+        container.innerHTML = `<div class="lista-empty">Error: ${err.message}</div>`;
     }
 }
 
 function renderizarLista(items) {
     const container = document.getElementById('listaRegistros');
+    if (items.length === 0) {
+        container.innerHTML = '<div class="lista-empty">No hay registros.</div>';
+        return;
+    }
+
     container.innerHTML = items.map(item => `
         <div class="registro-card estado-${item.estado_pago}">
             <div class="rc-top">
@@ -122,20 +103,22 @@ function renderAcciones(item) {
     if (currentUserRole === 'carga') return '';
     let html = '<div class="rc-acciones">';
     
+    // Supervisor habilita, Oficina/Admin confirma pago
     if (item.estado_pago === 'pendiente' && (currentUserRole === 'supervisor' || currentUserRole === 'admin')) {
         html += `<button class="btn-accion aprobar" onclick="cambiarEstado('${item.id}', 'aprobado')">Habilitar Pago</button>`;
     } else if (item.estado_pago === 'aprobado' && (currentUserRole === 'oficina' || currentUserRole === 'admin')) {
         html += `<button class="btn-accion pagar" onclick="cambiarEstado('${item.id}', 'pagado')">Confirmar Pago</button>`;
     }
 
+    // Sistema de comentarios para revisión
     if (currentUserRole === 'supervisor' || currentUserRole === 'admin') {
-        html += `<textarea class="comentario-input" placeholder="Nota de revisión..." onblur="guardarComentario('${item.id}', this.value)"></textarea>`;
+        html += `<textarea class="comentario-input" placeholder="Nota..." onblur="guardarComentario('${item.id}', this.value)"></textarea>`;
     }
     return html + '</div>';
 }
 
 /* ══════════════════════════════════════════════════════
-   UTILIDADES Y EXPOSICIÓN GLOBAL
+   4. INICIALIZACIÓN Y EXPOSICIÓN
 ══════════════════════════════════════════════════════ */
 async function cambiarEstado(id, nuevoEstado) {
     await sb.from('inventario').update({ estado_pago: nuevoEstado }).eq('id', id);
@@ -155,22 +138,17 @@ function switchTab(tabId) {
     if (tabId === 'tab-historial') cargarDatos();
 }
 
-function limpiarFormulario() {
-    document.querySelectorAll('input, textarea').forEach(i => i.value = '');
-}
-
-// INICIALIZACIÓN
 window.addEventListener('DOMContentLoaded', () => {
+    // Esto quita el logo de Romero y muestra el login
     setTimeout(() => {
         const loader = document.getElementById('loadingOverlay');
         if (loader) loader.classList.add('hidden');
-    }, 1500);
+    }, 1000);
 });
 
-// EXPOSICIÓN PARA HTML
+// Hacer funciones disponibles para los botones
 window.login = login;
 window.switchTab = switchTab;
-window.guardarPieza = guardarPieza;
 window.cambiarEstado = cambiarEstado;
 window.guardarComentario = guardarComentario;
 window.logout = () => location.reload();
